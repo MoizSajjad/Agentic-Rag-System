@@ -361,11 +361,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For questions or suggestions, please open an issue on GitHub.
 
 ---
-
-<div align="center">
-
-**⭐ If you find this project helpful, please consider giving it a star! ⭐**
-
-Made with ❤️ for the AI/ML community
-
-</div>
