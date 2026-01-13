@@ -1,0 +1,406 @@
+# 🏗️ Architecture Diagrams
+
+This file contains all architecture diagrams for the Agentic RAG-Based AI System.
+
+---
+
+## 1. High-Level Architecture Flow
+
+This diagram shows the complete flow from user question to final answer, including all decision points.
+
+```mermaid
+flowchart TD
+    A[User Question] --> B[Question Classifier]
+    B --> C{Valid Question?}
+    C -->|Yes| D[Memory Agent<br/>Check Cache]
+    C -->|No| Z[Refuse Answer]
+    D --> E{Cache Hit?}
+    E -->|Yes| F[Return Cached Answer]
+    E -->|No| G[Baseline RAG<br/>Initial Answer]
+    G --> H[Planner Agent<br/>Decide Strategy]
+    H --> I{Strategy?}
+    I -->|local_only| J[Retriever Agent<br/>Local Facts Only]
+    I -->|local_and_web| K[Retriever Agent<br/>Local + Web Search]
+    J --> L[Verifier Agent<br/>Detect Hallucinations]
+    K --> L
+    L --> M{Hallucination?}
+    M -->|Yes| N[Correct Answer]
+    M -->|No| O[Keep Answer]
+    N --> P[Memory Agent<br/>Save if Verified]
+    O --> P
+    P --> Q[Final Answer]
+    
+    style A fill:#e1f5ff
+    style Q fill:#c8e6c9
+    style Z fill:#ffcdd2
+    style M fill:#fff9c4
+    style P fill:#e1bee7
+```
+
+---
+
+## 2. System Components Diagram
+
+This diagram shows all system components, their relationships, and data flow.
+
+```mermaid
+graph TB
+    subgraph "User Interface"
+        UI[Streamlit Frontend]
+    end
+    
+    subgraph "Pipeline Orchestrator"
+        PIPELINE[Agentic Pipeline]
+    end
+    
+    subgraph "Agents"
+        CLASSIFIER[Question Classifier]
+        MEMORY[Memory Agent]
+        PLANNER[Planner Agent]
+        RETRIEVER[Retriever Agent]
+        VERIFIER[Verifier Agent]
+    end
+    
+    subgraph "Data Sources"
+        CHROMA[(ChromaDB<br/>Planetary Facts)]
+        WEB[Tavily API<br/>Web Search]
+        CSV[(CSV Data<br/>Ground Truth)]
+    end
+    
+    subgraph "LLM Services"
+        GROQ[Groq API<br/>LLM Generation]
+    end
+    
+    subgraph "Storage"
+        CACHE[(Memory Cache<br/>Verified Answers)]
+        LOGS[Logs<br/>Interactions & Metrics]
+    end
+    
+    UI --> PIPELINE
+    PIPELINE --> CLASSIFIER
+    PIPELINE --> MEMORY
+    PIPELINE --> PLANNER
+    PIPELINE --> RETRIEVER
+    PIPELINE --> VERIFIER
+    
+    CLASSIFIER --> GROQ
+    PLANNER --> GROQ
+    VERIFIER --> GROQ
+    
+    RETRIEVER --> CHROMA
+    RETRIEVER --> WEB
+    VERIFIER --> CSV
+    
+    MEMORY --> CACHE
+    PIPELINE --> LOGS
+    
+    style UI fill:#4fc3f7
+    style PIPELINE fill:#81c784
+    style CLASSIFIER fill:#fff176
+    style MEMORY fill:#ba68c8
+    style PLANNER fill:#ffb74d
+    style RETRIEVER fill:#64b5f6
+    style VERIFIER fill:#f06292
+    style CHROMA fill:#a5d6a7
+    style WEB fill:#90caf9
+    style CSV fill:#ce93d8
+    style GROQ fill:#ffccbc
+    style CACHE fill:#c5e1a5
+    style LOGS fill:#b0bec5
+```
+
+---
+
+## 3. Agent Interaction Sequence Diagram
+
+This sequence diagram shows the detailed interaction flow between all agents.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Pipeline
+    participant Classifier
+    participant Memory
+    participant Baseline
+    participant Planner
+    participant Retriever
+    participant Verifier
+    
+    User->>Pipeline: Ask Question
+    Pipeline->>Classifier: Classify Question
+    Classifier-->>Pipeline: Question Type
+    
+    Pipeline->>Memory: Check Cache
+    alt Cache Hit
+        Memory-->>Pipeline: Return Cached Answer
+        Pipeline-->>User: Final Answer
+    else Cache Miss
+        Pipeline->>Baseline: Generate Initial Answer
+        Baseline->>Baseline: Query ChromaDB
+        Baseline->>Baseline: Call Groq LLM
+        Baseline-->>Pipeline: Initial Answer
+        
+        Pipeline->>Planner: Critique & Decide Strategy
+        Planner->>Planner: Analyze Answer Quality
+        Planner-->>Pipeline: Strategy (local/web)
+        
+        Pipeline->>Retriever: Fetch Facts
+        alt Local Only
+            Retriever->>Retriever: Query ChromaDB
+        else Local + Web
+            Retriever->>Retriever: Query ChromaDB
+            Retriever->>Retriever: Search Tavily API
+        end
+        Retriever-->>Pipeline: Trusted Facts
+        
+        Pipeline->>Verifier: Verify & Correct
+        Verifier->>Verifier: Compare with Facts
+        Verifier->>Verifier: Detect Hallucinations
+        Verifier-->>Pipeline: Verified Answer
+        
+        Pipeline->>Memory: Save Verified Answer
+        Pipeline-->>User: Final Answer
+    end
+```
+
+---
+
+## 4. Data Flow Diagram
+
+This diagram shows how data flows through the system.
+
+```mermaid
+flowchart LR
+    subgraph "Input"
+        Q[User Question]
+    end
+    
+    subgraph "Processing"
+        C[Classify]
+        M[Memory Check]
+        B[Baseline RAG]
+        P[Plan]
+        R[Retrieve]
+        V[Verify]
+    end
+    
+    subgraph "Data Stores"
+        DB[(ChromaDB)]
+        WEB[Tavily]
+        CSV[(CSV)]
+        CACHE[(Cache)]
+    end
+    
+    subgraph "Output"
+        A[Final Answer]
+    end
+    
+    Q --> C
+    C --> M
+    M -->|Miss| B
+    M -->|Hit| A
+    B --> P
+    P --> R
+    R --> DB
+    R --> WEB
+    V --> CSV
+    R --> V
+    V --> CACHE
+    V --> A
+    
+    style Q fill:#e3f2fd
+    style A fill:#c8e6c9
+    style DB fill:#fff9c4
+    style WEB fill:#e1bee7
+    style CSV fill:#ffccbc
+    style CACHE fill:#b2dfdb
+```
+
+---
+
+## 5. Agent Responsibilities Diagram
+
+This diagram shows what each agent does and its inputs/outputs.
+
+```mermaid
+graph TD
+    subgraph "Question Classifier"
+        QC[Input: Question]
+        QC --> QC1[Extract Planet Name]
+        QC1 --> QC2[Detect Nonsense Keywords]
+        QC2 --> QC3[LLM Classification]
+        QC3 --> QCO[Output: Question Type]
+    end
+    
+    subgraph "Memory Agent"
+        MA[Input: Question]
+        MA --> MA1[Semantic Search Cache]
+        MA1 --> MA2{Found?}
+        MA2 -->|Yes| MA3[Return Cached]
+        MA2 -->|No| MA4[Save New Answer]
+        MA3 --> MAO1[Output: Cached Answer]
+        MA4 --> MAO2[Output: Saved]
+    end
+    
+    subgraph "Planner Agent"
+        PA[Input: Baseline Answer]
+        PA --> PA1[Self-Critique]
+        PA1 --> PA2{Needs Web?}
+        PA2 -->|Yes| PA3[Strategy: local_and_web]
+        PA2 -->|No| PA4[Strategy: local_only]
+        PA3 --> PAO[Output: Strategy]
+        PA4 --> PAO
+    end
+    
+    subgraph "Retriever Agent"
+        RA[Input: Question + Strategy]
+        RA --> RA1[Query ChromaDB]
+        RA --> RA2{Web Search?}
+        RA2 -->|Yes| RA3[Search Tavily]
+        RA2 -->|No| RA4[Local Only]
+        RA1 --> RAO[Output: Facts]
+        RA3 --> RAO
+        RA4 --> RAO
+    end
+    
+    subgraph "Verifier Agent"
+        VA[Input: Answer + Facts]
+        VA --> VA1[Compare Values]
+        VA1 --> VA2[Check Alignment]
+        VA2 --> VA3{Hallucination?}
+        VA3 -->|Yes| VA4[Correct Answer]
+        VA3 -->|No| VA5[Keep Answer]
+        VA4 --> VAO[Output: Verified Answer]
+        VA5 --> VAO
+    end
+    
+    style QC fill:#fff176
+    style MA fill:#ba68c8
+    style PA fill:#ffb74d
+    style RA fill:#64b5f6
+    style VA fill:#f06292
+```
+
+---
+
+## 6. Hallucination Detection Flow
+
+This diagram shows how hallucinations are detected and corrected.
+
+```mermaid
+flowchart TD
+    A[Baseline Answer] --> B[Extract Facts from Answer]
+    C[Retrieved Facts] --> D[Compare Values]
+    B --> D
+    D --> E{Numeric Match?}
+    E -->|No| F[Flag: Numeric Mismatch]
+    E -->|Yes| G[Check Topic Alignment]
+    G --> H{Answer Addresses Question?}
+    H -->|No| I[Flag: Topic Misalignment]
+    H -->|Yes| J[Check Keywords]
+    J --> K{Location/Finance Terms?}
+    K -->|Yes| L[Flag: Invalid Keywords]
+    K -->|No| M[Compare with Ground Truth]
+    F --> M
+    I --> M
+    L --> M
+    M --> N{Hallucination Detected?}
+    N -->|Yes| O[Regenerate Answer<br/>Using Only Trusted Facts]
+    N -->|No| P[Keep Original Answer]
+    O --> Q[Final Verified Answer]
+    P --> Q
+    
+    style A fill:#ffebee
+    style Q fill:#c8e6c9
+    style N fill:#fff9c4
+    style O fill:#ffcdd2
+    style P fill:#c8e6c9
+```
+
+---
+
+## 7. Memory System Flow
+
+This diagram shows how the memory caching system works.
+
+```mermaid
+flowchart TD
+    A[New Question] --> B[Embed Question]
+    B --> C[Search Memory Cache<br/>Semantic Similarity]
+    C --> D{Similar Question Found?}
+    D -->|Yes| E{Was Cached Answer<br/>Hallucination?}
+    E -->|No| F[Return Cached Answer]
+    E -->|Yes| G[Ignore Cache<br/>Process New]
+    D -->|No| G
+    G --> H[Process Through Pipeline]
+    H --> I[Get Verified Answer]
+    I --> J{Hallucination<br/>Detected?}
+    J -->|No| K[Save to Cache<br/>with Metadata]
+    J -->|Yes| L[Do Not Cache]
+    K --> M[Cache Updated]
+    L --> M
+    
+    style A fill:#e3f2fd
+    style F fill:#c8e6c9
+    style K fill:#a5d6a7
+    style L fill:#ffcdd2
+    style M fill:#b2dfdb
+```
+
+---
+
+## How to Use These Diagrams
+
+### In Markdown Files
+These Mermaid diagrams will render automatically in:
+- GitHub/GitLab markdown
+- VS Code (with Mermaid extension)
+- Most documentation platforms
+- Jupyter notebooks
+
+### Standalone Viewing
+You can view these diagrams using:
+1. **Mermaid Live Editor**: https://mermaid.live/
+   - Copy any diagram code
+   - Paste into the editor
+   - Export as PNG/SVG
+
+2. **VS Code Extension**: 
+   - Install "Markdown Preview Mermaid Support"
+   - Preview the markdown file
+
+3. **Online Tools**:
+   - https://mermaid-js.github.io/mermaid-live-editor/
+   - https://kroki.io/
+
+### Exporting as Images
+1. Go to https://mermaid.live/
+2. Paste the diagram code
+3. Click "Export" → Choose format (PNG, SVG, etc.)
+
+---
+
+## Diagram Legend
+
+### Colors Used:
+- **Blue** (#e1f5ff, #4fc3f7): User interface, input
+- **Green** (#c8e6c9, #81c784): Success, final output, data storage
+- **Yellow** (#fff176, #fff9c4): Classification, decision points
+- **Purple** (#ba68c8, #e1bee7): Memory/cache operations
+- **Orange** (#ffb74d, #ffccbc): Planning, LLM services
+- **Pink** (#f06292, #ffcdd2): Verification, error states
+- **Light Blue** (#64b5f6, #90caf9): Retrieval, web services
+
+### Shapes:
+- **Rectangle**: Process/Agent
+- **Diamond**: Decision point
+- **Cylinder**: Database/Storage
+- **Rounded Rectangle**: Input/Output
+- **Parallelogram**: Data flow
+
+---
+
+**Note**: All diagrams use Mermaid syntax and are compatible with most modern markdown renderers.
+
+
+
